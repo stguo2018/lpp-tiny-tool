@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -108,6 +109,7 @@ public class FileUploadComponent {
         Path path = Paths.get(tmpFileDirectory, chunk + "_" + file.getOriginalFilename());
         log.info("Starting upload file [{}].", path.toString());
         try {
+            Files.deleteIfExists(path);
             file.transferTo(path);
             FileInfo fileInfo = FileUploadCommon.UPLOAD_FILE_INFOS.get(md5);
             if (fileInfo != null) {
@@ -147,7 +149,7 @@ public class FileUploadComponent {
         Path path = Paths.get(uploadFileDirectory, fileInfo.getFileName());
         log.info("Starting merge file [{}].", path.toString());
 
-        if (StringUtils.isNoneBlank(fileInfo.getFilePath())) {
+        if (StringUtils.isNotBlank(fileInfo.getFilePath())) {
             fileInfo.setLocalDateTime(LocalDateTime.now());
             updateUploadFileInfos();
             log.info("File [{}] is already exists.", path.toString());
@@ -204,9 +206,10 @@ public class FileUploadComponent {
             try (FileInputStream fis = new FileInputStream(path.toFile());
                  FileChannel fisChannel = fis.getChannel()) {
                 ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+                byteBuffer.clear();
                 StringBuilder sb = new StringBuilder();
-                while (fisChannel.read(byteBuffer) != -1) {
-                    sb.append(new String(byteBuffer.array(), StandardCharsets.UTF_8));
+                while (fisChannel.read(byteBuffer) > 0) {
+                    sb.append(new String(getBytes(byteBuffer), StandardCharsets.UTF_8));
                     byteBuffer.clear();
                 }
                 ConcurrentMap<String, FileInfo> uploadFileInfos = JsonUtil
@@ -222,6 +225,21 @@ public class FileUploadComponent {
         }
     }
 
+    private byte[] getBytes(ByteBuffer byteBuffer) {
+        byteBuffer.flip();
+        if (byteBuffer.limit() == byteBuffer.capacity()) {
+            return byteBuffer.array();
+        } else {
+            int limit = byteBuffer.limit();
+            byte[] oldBytes = byteBuffer.array();
+            byte[] newBytes = new byte[limit];
+            for (int i = 0; i < limit; i++) {
+                newBytes[i] = oldBytes[i];
+            }
+            return newBytes;
+        }
+    }
+
     /**
      * 更新上传文件信息
      */
@@ -229,15 +247,16 @@ public class FileUploadComponent {
         String uploadFileInfoDirectory = FileUploadPathUtil.getDirectory(basePath, uploadFileInfosPath);
         Path path = Paths.get(uploadFileInfoDirectory, FileUploadCommon.UPLOAD_FILE_INFOS_FILE);
         String uploadFileInfosJson = Optional.ofNullable(JsonUtil.toJson(FileUploadCommon.UPLOAD_FILE_INFOS)).orElse("");
+        byte[] datas = uploadFileInfosJson.getBytes(StandardCharsets.UTF_8);
         try {
-            Files.delete(path);
+            Files.deleteIfExists(path);
         } catch (IOException e) {
             log.error(String.format("Delete [%s] failure!", path.toString()), e);
         }
         try (FileOutputStream fos = new FileOutputStream(path.toFile());
              FileChannel fosChannel = fos.getChannel()) {
-            ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
-            byteBuffer.put(uploadFileInfosJson.getBytes(StandardCharsets.UTF_8));
+            ByteBuffer byteBuffer = ByteBuffer.allocate(datas.length);
+            byteBuffer.put(datas);
             byteBuffer.flip();
             fosChannel.write(byteBuffer);
         } catch (IOException e) {
