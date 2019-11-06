@@ -1,0 +1,17 @@
+server:
+  port: 38080
+
+spring:
+  application:
+    name: lpp-tiny-tool
+
+  servlet:
+    multipart:
+      max-request-size: 10000MB
+      max-file-size: 100MB
+
+fileUpload:
+  basePath: lpp-tiny-tool/
+  tmpPath: tmp/
+  uploadPath: upload/
+  uploadFileInfosPath: file-info/
